@@ -20,10 +20,10 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # See https://docs.djangoproject.com/en/1.10/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = '2^f+3@v7$v1f8yt0!s)3-1t$)tlp+xm17=*g))_xoi&&9m#2a&'
+SECRET_KEY = os.getenv("SECRET_KEY_DB", "secret-key")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG_VALUE", "False") == "True"
 
 ALLOWED_HOSTS = []
 
@@ -85,8 +85,12 @@ WSGI_APPLICATION = 'conduit.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv("POSTGRES_DB", "conduit"),
+        'USER': os.getenv("USER_DB", "user"),
+        'PASSWORD': os.getenv("PASSWORD_DB", "changeme"),
+        'HOST': os.getenv("HOST_DB", "localhost"),
+        'PORT': os.getenv("PORT_DB", "5432"),
     }
 }
 
