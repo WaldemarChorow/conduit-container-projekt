@@ -1,2 +1,5 @@
 .env
 !.env.example
+
+# local log dumps (e.g. from `docker logs conduit-backend > backend-logs.txt`)
+*-logs.txt
