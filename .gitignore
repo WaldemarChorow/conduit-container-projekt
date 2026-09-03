@@ -3,3 +3,6 @@
 
 # local log dumps (e.g. from `docker logs conduit-backend > backend-logs.txt`)
 *-logs.txt
+
+# personal notes / build guides, not part of the submission
+docs/
