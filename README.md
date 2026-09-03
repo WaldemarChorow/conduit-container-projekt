@@ -59,7 +59,7 @@ You do **not** need to install Python, Node.js, Angular CLI or PostgreSQL locall
 
 1. Clone the repository:
    ```bash
-   git clone <this-repository-url>
+   git clone https://github.com/WaldemarChorow/conduit-container-projekt.git
    cd conduit-container-project
    ```
 
