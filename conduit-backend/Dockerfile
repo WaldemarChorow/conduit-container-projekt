@@ -7,6 +7,7 @@ RUN pip install -r requirements.txt
 
 # Stage 2
 FROM python:3.6-slim
+RUN apt-get update && apt-get install -y libpq5 && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.6/site-packages /usr/local/lib/python3.6/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin

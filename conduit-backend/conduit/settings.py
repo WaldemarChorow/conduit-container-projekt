@@ -25,7 +25,7 @@ SECRET_KEY = os.getenv("SECRET_KEY_DB", "secret-key")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG_VALUE", "False") == "True"
 
-ALLOWED_HOSTS = []
+os.getenv("ALLOWED_HOSTS_DB", "conduit-backend").split(",")
 
 
 # Application definition
@@ -87,8 +87,8 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.getenv("POSTGRES_DB", "conduit"),
-        'USER': os.getenv("USER_DB", "user"),
-        'PASSWORD': os.getenv("PASSWORD_DB", "changeme"),
+        'USER': os.getenv("POSTGRES_USER", "user"),
+        'PASSWORD': os.getenv("POSTGRES_PASSWORD", "changeme"),
         'HOST': os.getenv("HOST_DB", "localhost"),
         'PORT': os.getenv("PORT_DB", "5432"),
     }
