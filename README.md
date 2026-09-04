@@ -38,7 +38,7 @@ This task demonstrates the challenges a DevSecOps engineer might face in their d
 │   └── ...
 ├── conduit-frontend/        # Angular 17 client, served by nginx
 │   ├── Dockerfile           # Multi-stage build (node builder + nginx runtime)
-│   ├── nginx.conf           # Serves the app and reverse-proxies /api to the backend
+│   ├── nginx.conf           # Serves the compiled Angular app as static files
 │   └── ...
 ├── docker-compose.yaml      # Wires up db, backend and frontend
 ├── .env.example              # Template for the required environment variables
@@ -83,9 +83,9 @@ You do **not** need to install Python, Node.js, Angular CLI or PostgreSQL locall
 
 5. Open the app in your browser:
    ```
-   http://localhost:8080
+   http://<host>:8282
    ```
-   You should see the Conduit homepage. It will show "No articles are here... yet." — that's expected, the database starts empty. Sign up for an account to try writing an article.
+   Replace `<host>` with `localhost` for a local run, or the IP address of your server for a cloud deployment. You should see the Conduit homepage. It will show "No articles are here... yet." — that's expected, the database starts empty. Sign up for an account to try writing an article.
 
 6. To stop everything:
    ```bash
@@ -107,7 +107,8 @@ All configuration is passed via environment variables, read from the `.env` file
 | `SECRET_KEY_DB`      | backend         | Django's `SECRET_KEY`, used for cryptographic signing (sessions, CSRF tokens, etc.). Use a long, random value in production. | `mysecretkey`            |
 | `DEBUG_VALUE`        | backend         | Set to `True` to enable Django's debug mode (verbose error pages). **Must be `False` in production.** | `True`                  |
 | `DJANGO_PORT`        | backend         | Host port the backend is published on (maps to container port 8000).                              | `8000`                  |
-| `ALLOWED_HOSTS_DB`   | backend         | Comma-separated list of hostnames Django will accept requests for (Django's `ALLOWED_HOSTS`). Must include the backend's service name (`conduit-backend`, as used by nginx) and `localhost` (for direct access). | `conduit-backend,localhost` |
+| `ALLOWED_HOSTS_DB`   | backend         | Comma-separated list of hostnames Django will accept requests for (Django's `ALLOWED_HOSTS`). Must include every host/port the backend is actually addressed by: `conduit-backend` (used internally), `localhost`, and — for a cloud deployment — the server's IP address both without and with the backend port (e.g. `1.2.3.4` and `1.2.3.4:8000`), since the browser talks to the backend directly. | `conduit-backend,localhost,1.2.3.4,1.2.3.4:8000` |
+| `CORS_ORIGIN_WHITELIST_DB` | backend   | Comma-separated list of origins allowed to call the API from a browser (`django-cors-middleware`'s `CORS_ORIGIN_WHITELIST`). Give it as `host:port`, **without** a `http://` prefix — the library compares it against the parsed origin's `netloc`, which never includes the scheme. | `1.2.3.4:8282`          |
 
 `HOST_DB` and `PORT_DB` (the database host/port the backend connects to) are **not** part of `.env` — they are hardcoded in `docker-compose.yaml` (`HOST_DB: db`, `PORT_DB: 5432`) because they describe the internal container network, not something a user should need to change. `db` is the service name of the PostgreSQL container; Docker Compose automatically makes it resolvable as a hostname from the other containers.
 
@@ -115,13 +116,13 @@ All configuration is passed via environment variables, read from the `.env` file
 
 | Service            | Container port | Host port           | URL                          |
 |---------------------|-----------------|----------------------|-------------------------------|
-| `conduit-frontend`  | 80 (nginx)      | `8080`               | http://localhost:8080         |
-| `conduit-backend`   | 8000 (Gunicorn) | `${DJANGO_PORT}`     | http://localhost:8000         |
+| `conduit-frontend`  | 80 (nginx)      | `8282`               | http://\<host\>:8282           |
+| `conduit-backend`   | 8000 (Gunicorn) | `${DJANGO_PORT}`     | http://\<host\>:8000           |
 | `db` (PostgreSQL)   | 5432            | not published        | only reachable from other containers |
 
 To change the frontend's host port, edit the `ports:` line under `conduit-frontend` in `docker-compose.yaml` (e.g. `"9090:80"`). To change the backend's host port, just change `DJANGO_PORT` in `.env` — no need to touch `docker-compose.yaml`.
 
-The frontend serves the compiled Angular app and forwards every request starting with `/api` to the backend container (see `conduit-frontend/nginx.conf`). This means the browser always talks to a single host (`localhost:8080`), which also works unchanged once the app is deployed to a real server.
+The frontend is served by nginx as plain static files — nginx does **not** proxy API requests. Instead, the Angular app is built with the backend's address hardcoded into it (see `conduit-frontend/src/app/core/interceptors/api.interceptor.ts`), so the browser calls the backend directly on its own port. This is simpler to reason about than a reverse proxy, at the cost of needing a rebuild whenever the backend's host/port changes (see [Rebuilding After Changes](#rebuilding-after-changes)) and needing `ALLOWED_HOSTS_DB`/`CORS_ORIGIN_WHITELIST_DB` to explicitly list that address (see [Environment Variables](#environment-variables)).
 
 ### Rebuilding After Changes
 
@@ -133,6 +134,7 @@ The frontend serves the compiled Angular app and forwards every request starting
   ```bash
   docker compose up --build -d
   ```
+- This includes the backend's address hardcoded in `api.interceptor.ts` (see [Ports](#ports)) — if you deploy to a different host/port, update that URL and rebuild the frontend, not just `.env`.
 
 ### Persisting Data
 
@@ -165,15 +167,15 @@ Before considering the setup done, verify the following:
 
 1. **The frontend is reachable.**
    ```bash
-   curl -I http://localhost:8080
+   curl -I http://<host>:8282
    ```
-   Expect `HTTP/1.1 200 OK`. Opening `http://localhost:8080` in a browser should show the Conduit homepage.
+   Expect `HTTP/1.1 200 OK`. Opening `http://<host>:8282` in a browser should show the Conduit homepage.
 
-2. **The backend serves real data through the frontend's reverse proxy**, not just directly.
+2. **The backend serves real data.**
    ```bash
-   curl http://localhost:8080/api/articles
+   curl http://<host>:8000/api/articles
    ```
-   Expect a JSON response like `{"articles": [], "articlesCount": 0}` — this confirms nginx is correctly forwarding `/api` requests to the backend container.
+   Expect a JSON response like `{"articles": [], "articlesCount": 0}`. Then check the same thing in the browser's DevTools Network tab while the homepage loads — the `/api/articles` and `/api/tags` requests (going directly to port 8000, not through the frontend) should also come back `200`, not blocked by CORS and not `400 DisallowedHost`.
 
 3. **The backend runs a production WSGI server, not Django's dev server.**
    ```bash
