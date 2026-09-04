@@ -25,7 +25,7 @@ SECRET_KEY = os.getenv("SECRET_KEY_DB", "secret-key")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG_VALUE", "False") == "True"
 
-os.getenv("ALLOWED_HOSTS_DB", "conduit-backend").split(",")
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS_DB", "conduit-backend").split(",")
 
 
 # Application definition
