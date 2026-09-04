@@ -134,7 +134,7 @@ USE_TZ = True
 STATIC_URL = '/static/'
 
 CORS_ORIGIN_WHITELIST = os.getenv(
-    "CORS_ORIGIN_WHITELIST_DB", "http://167.235.51.233:8282"
+    "CORS_ORIGIN_WHITELIST_DB", "167.235.51.233:8282"
 ).split(",")
 
 # Tell Django about the custom `User` model we created. The string
