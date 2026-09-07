@@ -2,7 +2,7 @@ services:
   db:
     image: postgres:16
     container_name: postgres_db
-    restart: unless-stopped
+    restart: on-failure
   
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -12,11 +12,12 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   conduit-backend:
+    image: conduit-backend:latest
     build:
       context: ./conduit-backend
       dockerfile: Dockerfile
     container_name: conduit-backend
-    restart: unless-stopped
+    restart: on-failure
     environment:
       DEBUG_VALUE: ${DEBUG_VALUE}
       SECRET_KEY_DB: ${SECRET_KEY_DB}
@@ -33,11 +34,12 @@ services:
       - "${DJANGO_PORT}:8000"
 
   conduit-frontend:
+    image: conduit-frontend:latest
     build:
       context: ./conduit-frontend
       dockerfile: Dockerfile
     container_name: conduit-frontend
-    restart: unless-stopped
+    restart: on-failure
     ports:
       - "8282:80"
     
