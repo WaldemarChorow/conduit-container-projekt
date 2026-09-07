@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /Users/chorai/Documents/developer_akademie/devsecops/projekte/conduit-container-proejct/conduit-frontend/src/environments)"
+    ],
+    "additionalDirectories": [
+      "/Users/chorai/Documents/developer_akademie/devsecops/projekte/conduit-container-proejct/conduit-frontend/src"
+    ]
+  }
+}
