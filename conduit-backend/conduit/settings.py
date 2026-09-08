@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
+    'corsheaders',
     'django_extensions',
     'rest_framework',
 
@@ -48,6 +49,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -130,6 +132,15 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/1.10/howto/static-files/
 
 STATIC_URL = '/static/'
+
+# Not needed while the frontend's nginx reverse-proxies /api to this backend
+# (see conduit-frontend/nginx.conf) - the browser then never makes a
+# cross-origin request. Left here, empty by default, in case this backend is
+# ever deployed without that proxy in front of it.
+CORS_ORIGIN_WHITELIST = [
+    origin for origin in os.getenv("CORS_ORIGIN_WHITELIST_DB", "").split(",")
+    if origin
+]
 
 # Tell Django about the custom `User` model we created. The string
 # `authentication.User` tells Django we are referring to the `User` model in
