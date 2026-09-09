@@ -133,9 +133,14 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
-CORS_ORIGIN_WHITELIST = os.getenv(
-    "CORS_ORIGIN_WHITELIST_DB", "167.235.51.233:8282"
-).split(",")
+# Not needed while the frontend's nginx reverse-proxies /api to this backend
+# (see conduit-frontend/nginx.conf) - the browser then never makes a
+# cross-origin request. Left here, empty by default, in case this backend is
+# ever deployed without that proxy in front of it.
+CORS_ORIGIN_WHITELIST = [
+    origin for origin in os.getenv("CORS_ORIGIN_WHITELIST_DB", "").split(",")
+    if origin
+]
 
 # Tell Django about the custom `User` model we created. The string
 # `authentication.User` tells Django we are referring to the `User` model in
