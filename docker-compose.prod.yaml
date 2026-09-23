@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:16
+    container_name: postgres_db
+    restart: on-failure
+  
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  conduit-backend:
+    image: ghcr.io/waldemarchorow/conduit-container-projekt-backend:latest
+    container_name: conduit-backend
+    restart: on-failure
+    environment:
+      DEBUG_VALUE: ${DEBUG_VALUE}
+      SECRET_KEY_DB: ${SECRET_KEY_DB}
+      ALLOWED_HOSTS_DB: ${ALLOWED_HOSTS_DB}
+      CORS_ORIGIN_WHITELIST_DB: ${CORS_ORIGIN_WHITELIST_DB}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      HOST_DB: db
+      PORT_DB: 5432
+    depends_on:
+      - db
+    ports:
+      - "${DJANGO_PORT}:8000"
+
+  conduit-frontend:
+    image: ghcr.io/waldemarchorow/conduit-container-projekt-frontend:latest
+    container_name: conduit-frontend
+    restart: on-failure
+    ports:
+      - "8282:80"
+    
+
+     
+volumes:
+ postgres_data:
+
