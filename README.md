@@ -256,6 +256,7 @@ push to deployment-branch
    containers on the VM are recreated from the freshly pulled images
 ```
 
+
 If any step in `build` fails (for example, a failed image build), the `deploy` job is skipped entirely, and the workflow run is marked as failed — nothing is deployed. If the SSH connection or any remote command in `deploy` fails (wrong credentials, unreachable host, a `docker compose` error on the server), that step's non-zero exit code fails the job and the workflow run, so a broken deployment is never silently reported as successful.
 
 ### Manual Verification
