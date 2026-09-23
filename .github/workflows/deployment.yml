@@ -10,8 +10,10 @@ on:
     branches: [ "deployment-branch" ]
     # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
+    paths-ignore: ['*.md', '.gitignore', '.env.example']
   pull_request:
     branches: [ "deployment-branch" ]
+    paths-ignore: ['*.md', '.gitignore', '.env.example']
     
 
 env:
