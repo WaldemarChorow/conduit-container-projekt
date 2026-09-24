@@ -35,7 +35,7 @@ services:
     container_name: conduit-frontend
     restart: on-failure
     ports:
-      - "8282:80"
+      - "${FRONTEND_PORT}:80"
     
 
      

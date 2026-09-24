@@ -119,6 +119,7 @@ All configuration is passed via environment variables, read from the `.env` file
 | `DJANGO_PORT`        | backend         | Host port the backend is published on (maps to container port 8000).                              | `8000`                  |
 | `ALLOWED_HOSTS_DB`   | backend         | Comma-separated list of hostnames Django will accept requests for (Django's `ALLOWED_HOSTS`). Must include every host/port the backend is actually addressed by: `conduit-backend` (used internally), `localhost`, and — for a cloud deployment — the server's IP address both without and with the backend port (e.g. `1.2.3.4` and `1.2.3.4:8000`), since the browser talks to the backend directly. | `conduit-backend,localhost,1.2.3.4,1.2.3.4:8000` |
 | `CORS_ORIGIN_WHITELIST_DB` | backend   | Comma-separated list of origins allowed to call the API from a browser (`django-cors-middleware`'s `CORS_ORIGIN_WHITELIST`). Give it as `host:port`, **without** a `http://` prefix — the library compares it against the parsed origin's `netloc`, which never includes the scheme. | `1.2.3.4:8282`          |
+| `FRONTEND_PORT`      | frontend        | Host port the frontend (nginx) is published on (maps to container port 80).                       | `8282`                  |
 
 `HOST_DB` and `PORT_DB` (the database host/port the backend connects to) are **not** part of `.env` — they are hardcoded in `docker-compose.yaml` (`HOST_DB: db`, `PORT_DB: 5432`) because they describe the internal container network, not something a user should need to change. `db` is the service name of the PostgreSQL container; Docker Compose automatically makes it resolvable as a hostname from the other containers.
 
@@ -126,11 +127,11 @@ All configuration is passed via environment variables, read from the `.env` file
 
 | Service            | Container port | Host port           | URL                          |
 |---------------------|-----------------|----------------------|-------------------------------|
-| `conduit-frontend`  | 80 (nginx)      | `8282`               | http://\<host\>:8282           |
+| `conduit-frontend`  | 80 (nginx)      | `${FRONTEND_PORT}`   | http://\<host\>:8282           |
 | `conduit-backend`   | 8000 (Gunicorn) | `${DJANGO_PORT}`     | http://\<host\>:8000           |
 | `db` (PostgreSQL)   | 5432            | not published        | only reachable from other containers |
 
-To change the frontend's host port, edit the `ports:` line under `conduit-frontend` in `docker-compose.yaml` (e.g. `"9090:80"`). To change the backend's host port, just change `DJANGO_PORT` in `.env` — no need to touch `docker-compose.yaml`.
+To change the frontend's host port, change `FRONTEND_PORT` in `.env`. To change the backend's host port, change `DJANGO_PORT` in `.env`. Neither requires touching `docker-compose.yaml`.
 
 The frontend is served by nginx as plain static files — nginx does **not** proxy API requests. Instead, the Angular app is built with the backend's address hardcoded into it (see `conduit-frontend/src/app/core/interceptors/api.interceptor.ts`), so the browser calls the backend directly on its own port. This is simpler to reason about than a reverse proxy, at the cost of needing a rebuild whenever the backend's host/port changes (see [Rebuilding After Changes](#rebuilding-after-changes)) and needing `ALLOWED_HOSTS_DB`/`CORS_ORIGIN_WHITELIST_DB` to explicitly list that address (see [Environment Variables](#environment-variables)).
 

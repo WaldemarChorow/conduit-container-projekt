@@ -11,10 +11,17 @@ on:
     # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
     paths-ignore: ['*.md', '.gitignore', '.env.example']
+  # The pull_request trigger runs the build job as a pre-merge check only
+  # (does the image still build?). It intentionally does NOT push, sign,
+  # or deploy: PRs may come from branches (or forks) whose code hasn't
+  # been reviewed yet, so secrets (GITHUB_TOKEN, SSH key) and the
+  # production server must stay out of reach until the code is merged
+  # via the push trigger above. That's why every step past the build
+  # itself is gated with `if: github.event_name != 'pull_request'`.
   pull_request:
     branches: [ "deployment-branch" ]
     paths-ignore: ['*.md', '.gitignore', '.env.example']
-    
+
 
 env:
   # Use docker.io for Docker Hub if empty
