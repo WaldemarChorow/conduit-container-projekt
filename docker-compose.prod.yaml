@@ -12,10 +12,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   conduit-backend:
-    image: conduit-backend:latest
-    build:
-      context: ./conduit-backend
-      dockerfile: Dockerfile
+    image: ghcr.io/waldemarchorow/conduit-container-projekt-backend:latest
     container_name: conduit-backend
     restart: on-failure
     environment:
@@ -34,10 +31,7 @@ services:
       - "${DJANGO_PORT}:8000"
 
   conduit-frontend:
-    image: conduit-frontend:latest
-    build:
-      context: ./conduit-frontend
-      dockerfile: Dockerfile
+    image: ghcr.io/waldemarchorow/conduit-container-projekt-frontend:latest
     container_name: conduit-frontend
     restart: on-failure
     ports:

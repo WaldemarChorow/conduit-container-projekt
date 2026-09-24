@@ -26,6 +26,12 @@ This task demonstrates the challenges a DevSecOps engineer might face in their d
   - [Persisting Data](#persisting-data)
   - [Viewing and Saving Logs](#viewing-and-saving-logs)
 - [Testing / Verification](#testing--verification)
+- [CI/CD Deployment](#cicd-deployment)
+  - [Overview](#overview)
+  - [Required GitHub Secrets](#required-github-secrets)
+  - [Server-Side Setup](#server-side-setup)
+  - [How the Workflow Runs](#how-the-workflow-runs)
+  - [Manual Verification](#manual-verification)
 - [Known Issues](#known-issues)
 
 ## Repository Structure
@@ -40,8 +46,12 @@ This task demonstrates the challenges a DevSecOps engineer might face in their d
 │   ├── Dockerfile           # Multi-stage build (node builder + nginx runtime)
 │   ├── nginx.conf           # Serves the compiled Angular app as static files
 │   └── ...
-├── docker-compose.yaml      # Wires up db, backend and frontend
+├── docker-compose.yaml      # Local dev setup: builds images from source
+├── docker-compose.prod.yaml # Production setup: pulls pre-built images from ghcr.io, no build
 ├── .env.example              # Template for the required environment variables
+├── .github/
+│   └── workflows/
+│       └── deployment.yml   # CI/CD: builds + pushes images, then deploys over SSH
 └── README.md
 ```
 
@@ -109,6 +119,7 @@ All configuration is passed via environment variables, read from the `.env` file
 | `DJANGO_PORT`        | backend         | Host port the backend is published on (maps to container port 8000).                              | `8000`                  |
 | `ALLOWED_HOSTS_DB`   | backend         | Comma-separated list of hostnames Django will accept requests for (Django's `ALLOWED_HOSTS`). Must include every host/port the backend is actually addressed by: `conduit-backend` (used internally), `localhost`, and — for a cloud deployment — the server's IP address both without and with the backend port (e.g. `1.2.3.4` and `1.2.3.4:8000`), since the browser talks to the backend directly. | `conduit-backend,localhost,1.2.3.4,1.2.3.4:8000` |
 | `CORS_ORIGIN_WHITELIST_DB` | backend   | Comma-separated list of origins allowed to call the API from a browser (`django-cors-middleware`'s `CORS_ORIGIN_WHITELIST`). Give it as `host:port`, **without** a `http://` prefix — the library compares it against the parsed origin's `netloc`, which never includes the scheme. | `1.2.3.4:8282`          |
+| `FRONTEND_PORT`      | frontend        | Host port the frontend (nginx) is published on (maps to container port 80).                       | `8282`                  |
 
 `HOST_DB` and `PORT_DB` (the database host/port the backend connects to) are **not** part of `.env` — they are hardcoded in `docker-compose.yaml` (`HOST_DB: db`, `PORT_DB: 5432`) because they describe the internal container network, not something a user should need to change. `db` is the service name of the PostgreSQL container; Docker Compose automatically makes it resolvable as a hostname from the other containers.
 
@@ -116,11 +127,11 @@ All configuration is passed via environment variables, read from the `.env` file
 
 | Service            | Container port | Host port           | URL                          |
 |---------------------|-----------------|----------------------|-------------------------------|
-| `conduit-frontend`  | 80 (nginx)      | `8282`               | http://\<host\>:8282           |
+| `conduit-frontend`  | 80 (nginx)      | `${FRONTEND_PORT}`   | http://\<host\>:8282           |
 | `conduit-backend`   | 8000 (Gunicorn) | `${DJANGO_PORT}`     | http://\<host\>:8000           |
 | `db` (PostgreSQL)   | 5432            | not published        | only reachable from other containers |
 
-To change the frontend's host port, edit the `ports:` line under `conduit-frontend` in `docker-compose.yaml` (e.g. `"9090:80"`). To change the backend's host port, just change `DJANGO_PORT` in `.env` — no need to touch `docker-compose.yaml`.
+To change the frontend's host port, change `FRONTEND_PORT` in `.env`. To change the backend's host port, change `DJANGO_PORT` in `.env`. Neither requires touching `docker-compose.yaml`.
 
 The frontend is served by nginx as plain static files — nginx does **not** proxy API requests. Instead, the Angular app is built with the backend's address hardcoded into it (see `conduit-frontend/src/app/core/interceptors/api.interceptor.ts`), so the browser calls the backend directly on its own port. This is simpler to reason about than a reverse proxy, at the cost of needing a rebuild whenever the backend's host/port changes (see [Rebuilding After Changes](#rebuilding-after-changes)) and needing `ALLOWED_HOSTS_DB`/`CORS_ORIGIN_WHITELIST_DB` to explicitly list that address (see [Environment Variables](#environment-variables)).
 
@@ -188,6 +199,76 @@ Before considering the setup done, verify the following:
 5. **Containers restart automatically after a crash.** All services are configured with `restart: unless-stopped`. This means Docker restarts a container on its own if the process inside it exits unexpectedly (e.g. Gunicorn crashing due to a bug). It does **not** restart a container that was deliberately stopped by a human or a tool (`docker stop` / `docker kill`) — that distinction is exactly what "unless stopped" means. In other words: running `docker kill conduit-backend` is expected to leave it stopped (`docker compose ps` will simply not list it as running), and that is correct, intended behavior, not something to "fix" by restarting it manually.
 
 6. **Data survives a restart.** Create a superuser account (`docker compose exec conduit-backend python manage.py createsuperuser`), then run `docker compose down` followed by `docker compose up -d` (without `-v`, so the volume is kept). Logging back in with the same account afterwards confirms the PostgreSQL volume is working (see [Persisting Data](#persisting-data)).
+
+## CI/CD Deployment
+
+### Overview
+
+Besides running the stack locally, this repository ships a GitHub Actions workflow ([`.github/workflows/deployment.yml`](.github/workflows/deployment.yml)) that builds the backend and frontend images, publishes them to the GitHub Container Registry (`ghcr.io`), signs them with [cosign](https://github.com/sigstore/cosign), and then deploys them to a remote cloud VM over SSH.
+
+The workflow has two jobs, run in order:
+
+1. **`build`** — checks out the repository, builds the `conduit-backend` and `conduit-frontend` images separately (each from its own `Dockerfile`), pushes both to `ghcr.io` tagged `latest`, and signs both image digests with cosign.
+2. **`deploy`** — runs only after `build` succeeds (`needs: build`), and only on a real `push` (not on pull requests, and not on the daily schedule that older template versions of this workflow used, to avoid deploying unreviewed or unintended changes). It copies `docker-compose.prod.yaml` onto the server via SCP, then opens an SSH connection and runs `docker compose pull` followed by `docker compose up -d`.
+
+Crucially, **the application is never built on the VM.** The VM only ever pulls already-built, already-signed images from the registry and starts containers from them — that is the whole point of separating `docker-compose.yaml` (which has a `build:` section, for local development) from `docker-compose.prod.yaml` (which only has `image:` entries pointing at `ghcr.io`, no `build:` section at all).
+
+### Required GitHub Secrets
+
+Under the repository's **Settings → Secrets and variables → Actions**, the following repository secrets must be configured before the `deploy` job can run:
+
+| Secret              | Purpose                                                                                   |
+|----------------------|---------------------------------------------------------------------------------------------|
+| `SSH_HOST`           | The IP address or hostname of the target VM.                                               |
+| `SSH_USER`           | The Linux username the workflow logs in as.                                                |
+| `SSH_PRIVATE_KEY`    | The **private** half of an SSH keypair whose **public** half is already in that user's `~/.ssh/authorized_keys` on the VM. Paste the entire file content, including the `-----BEGIN ... PRIVATE KEY-----` / `-----END ... PRIVATE KEY-----` lines. |
+| `DEPLOY_PATH`        | The absolute path on the VM where `docker-compose.prod.yaml` is copied to and where `docker compose` is run from (e.g. `/home/<user>/conduit-container-projekt`). |
+
+`GITHUB_TOKEN`, used to authenticate against `ghcr.io` in the `build` job, is provided automatically by GitHub Actions and does not need to be created manually.
+
+### Server-Side Setup
+
+The workflow assumes the following already exists on the VM (this is a one-time manual setup, not something the workflow does for you):
+
+- Docker and the Docker Compose plugin installed (`docker compose version` should work).
+- The directory referenced by the `DEPLOY_PATH` secret already exists.
+- A `.env` file with production values (real database password, `DEBUG_VALUE=False`, the server's actual `ALLOWED_HOSTS_DB`/`CORS_ORIGIN_WHITELIST_DB`, etc. — see [Environment Variables](#environment-variables)) sits in that same directory, next to where `docker-compose.prod.yaml` gets copied. Docker Compose reads it automatically.
+- The public half of the SSH keypair used for `SSH_PRIVATE_KEY` is present in the deploy user's `~/.ssh/authorized_keys`.
+
+### How the Workflow Runs
+
+```
+push to deployment-branch
+        │
+        ▼
+┌───────────────────┐
+│  build job         │  builds conduit-backend and conduit-frontend
+│                     │  pushes both to ghcr.io as :latest, signs with cosign
+└─────────┬───────────┘
+          │ needs: build (only runs if build succeeded)
+          ▼
+┌───────────────────┐
+│  deploy job         │  1) scp: copies docker-compose.prod.yaml to the VM
+│                     │  2) ssh: docker compose -f docker-compose.prod.yaml pull
+│                     │           docker compose -f docker-compose.prod.yaml up -d
+└─────────────────────┘
+          │
+          ▼
+   containers on the VM are recreated from the freshly pulled images
+```
+
+
+If any step in `build` fails (for example, a failed image build), the `deploy` job is skipped entirely, and the workflow run is marked as failed — nothing is deployed. If the SSH connection or any remote command in `deploy` fails (wrong credentials, unreachable host, a `docker compose` error on the server), that step's non-zero exit code fails the job and the workflow run, so a broken deployment is never silently reported as successful.
+
+### Manual Verification
+
+After a successful run, confirm the deployment actually took effect by logging into the VM and running:
+
+```bash
+docker ps
+```
+
+All three containers (`conduit-backend`, `conduit-frontend`, `postgres_db`) should show a recent `CREATED`/`Up` time matching when the workflow ran, and the `IMAGE` column should show the full `ghcr.io/...` names — confirming the containers were recreated from freshly pulled registry images, not built locally. From there, the same checks as in [Testing / Verification](#testing--verification) apply, using the VM's IP instead of `localhost`.
 
 ## Known Issues
 
